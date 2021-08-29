@@ -2,27 +2,26 @@ use std::collections::HashMap;
 use std::fs;
 use rand::Rng;
 
-pub struct MarkovChain<'a>
+pub struct MarkovChain
 {
-	pub content: String,
-	pub wordmap: HashMap<(&'a str, &'a str), Vec<&'a str>>,
+	inner: HashMap<String, Vec<String>>,
 }
 
-impl<'a> MarkovChain<'a>
+impl MarkovChain
 {
 	pub fn new(filename: &str) -> Self
 	{
-		return MarkovChain {
-			
-			content: fs::read_to_string(filename)
-				.expect("error reading file")
-				.to_lowercase(),
-			wordmap: HashMap::new(),
-		};
-	}
-	
-	pub fn build<'b>(content: &'b str, wordmap: &mut HashMap<(&'b str, &'b str), Vec<&'b str>>)
-	{
+		let content = fs::read_to_string(filename)
+			.expect("error reading file")
+			.to_lowercase()
+			.replace("*", "")
+			.replace("_", "")
+			.replace("-", "")
+			.replace("—", " ")
+			.replace("--", " ");
+		
+		let mut wordmap: HashMap<String, Vec<String>> = HashMap::new();
+		
 		let mut ngram = ("", "");
 		let mut after = "";
 		
@@ -33,17 +32,22 @@ impl<'a> MarkovChain<'a>
 			
 			if ngram.0 == "" { continue; }
 			
-			if let Some(val) = wordmap.get_mut(&ngram) {
+			let key = [ngram.0, ngram.1].join(" ");
+			
+			if let Some(val) = wordmap.get_mut(&key) {
 				
-				val.push(after);
+				val.push(after.to_owned());
 			}
 			else {
 				
-				wordmap.insert(ngram, vec![after]);
+				wordmap.insert(key, vec![after.to_owned()]);
 			}
 		}
 		
-		return;
+		return MarkovChain {
+			
+			inner: wordmap,
+		};
 	}
 	
 	pub fn generate_paragraph(&self, context: &str) -> String
@@ -53,7 +57,8 @@ impl<'a> MarkovChain<'a>
 		for _ in 0..rand::thread_rng().gen_range(4..11) {
 			
 			let words: Vec<&str> = paragraph.split_whitespace().rev().collect();
-			let context = words[1].to_string() + " " + words[0];
+			let context = [words[1], words[0]].join(" ");
+			
 			paragraph = paragraph + " " + &Self::generate_sentence(self, &context);
 		}
 		
@@ -62,58 +67,47 @@ impl<'a> MarkovChain<'a>
 	
 	pub fn generate_sentence(&self, context: &str) -> String
 	{
-		let mut sentence = String::new();
+		let mut context: Vec<&str> = context.split_whitespace().rev().collect();
 		
-		if context == "" {
+		let keys: Vec<&String> = self.inner.keys().collect();
+		let key = keys[rand::thread_rng().gen_range(0..keys.len())];
+		
+		let mut key = key.split_whitespace().rev();
+		
+		while context.len() < 2 {
 			
-			let keys: Vec<&(&str, &str)> = self.wordmap.keys().collect();
-			let key = *(keys[rand::thread_rng().gen_range(0..keys.len())]);
-			sentence = sentence + key.0 + " " + key.1;
+			context.push(key.next().unwrap());
 		}
-		else {
+		
+		let mut sentence = [context[1], context[0]].join(" ");
+		
+		for _ in 0..=1 {
 			
-			let words: Vec<&str> = context.split_whitespace().rev().collect();
-			if words.len() < 2 {
+			let words: Vec<&str> = sentence.split_whitespace().rev().collect();
+			let key = [words[1], words[0]].join(" ");
+			
+			let next: &str = match self.inner.get(&key) {
 				
-				let keys: Vec<&(&str, &str)> = self.wordmap.keys().collect();
-				let key = (words[0], (*(keys[rand::thread_rng().gen_range(0..keys.len())])).1);
-				let next = match self.wordmap.get(&key) {
-					
-					Some(val) => val[rand::thread_rng().gen_range(0..val.len())],
-					None => "end.",
-				};
-				sentence = sentence + key.1 + " " + next;
-			}
-			else {
-				
-				let key = (words[1], words[0]);
-				let next = match self.wordmap.get(&key) {
-					
-					Some(val) => val[rand::thread_rng().gen_range(0..val.len())],
-					None => "the",
-				};
-				let key = (key.1, next);
-				let next = match self.wordmap.get(&key) {
-					
-					Some(val) => val[rand::thread_rng().gen_range(0..val.len())],
-					None => "end.",
-				};
-				sentence = sentence + key.1 + " " + next;
-			}
+				Some(val) => &val[rand::thread_rng().gen_range(0..val.len())],
+				None => ".",
+			};
+			sentence = sentence + " " + next;
 		}
 		
 		while sentence.chars().last().unwrap() != '.' {
 			
 			let words: Vec<&str> = sentence.split_whitespace().rev().collect();
-			let key = (words[1], words[0]);
-			let next = match self.wordmap.get(&key) {
+			let key = [words[1], words[0]].join(" ");
+			
+			let next: &str = match self.inner.get(&key) {
 				
-				Some(val) => val[rand::thread_rng().gen_range(0..val.len())],
-				None => "the end.",
+				Some(val) => &val[rand::thread_rng().gen_range(0..val.len())],
+				None => ".",
 			};
 			sentence = sentence + " " + next;
 		}
 		
-		return sentence;
+		let sentence: Vec<&str> = sentence.split_whitespace().skip(2).collect();
+		return sentence.join(" ");
 	}
 }

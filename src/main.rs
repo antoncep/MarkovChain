@@ -3,25 +3,30 @@ use markov_chain::MarkovChain;
 
 fn main()
 {
-	let args: Vec<String> = env::args().collect();
+	let args: Vec<String> = env::args()
+		.skip(1)
+		.collect();
 	
 	let context: String;
-	let mut chain = match args.len() {
+	let wordmap = match args.len() {
 		
-		1 => {
-			context = String::from("");
+		0 => {
+			context = String::new();
 			MarkovChain::new("input.txt")
 		},
+		1 => {
+			context = String::new();
+			MarkovChain::new(&args[0])
+		},
 		_ => {
-			context = args[2..].join(" ");
-			MarkovChain::new(&args[1])
+			context = args[1..].join(" ");
+			MarkovChain::new(&args[0])
 		},
 	};
-	MarkovChain::build(&chain.content, &mut chain.wordmap);
 	
 	println!("{} {}",
 		context,
-		chain.generate_paragraph(&context),
+		wordmap.generate_paragraph(&context),
 	);
 	
 	return;
